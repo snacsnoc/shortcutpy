@@ -14,12 +14,14 @@ else:
 
 
 class StoryCard(toga.Box):
-    def __init__(self, story, style=None):
+    def __init__(self, story, app, style=None):
         super().__init__(
             style=Pack(direction=COLUMN, padding=10, background_color="blue")
         )
-
+        # Pass the main app instance to access methods within it
+        self.app = app
         self.story = story
+
         name_label = toga.Label(f"Name: {story.get('name', 'N/A')}")
         deadline_label = toga.Label(f"Deadline: {story.get('deadline', 'N/A')}")
         blocked_label = toga.Label(f"Blocked?: {story.get('blocked', 'N/A')}")
@@ -27,12 +29,27 @@ class StoryCard(toga.Box):
             f"Tasks completed: {story.get('num_tasks_completed', 'N/A')}"
         )
         story_type_label = toga.Label(f"Type: {story.get('story_type', 'N/A')}")
+        # Create a button or another widget that can be clicked
+        details_button = toga.Button(
+            "View Details", on_press=self.app.show_story_details
+        )
 
         self.add(name_label)
         self.add(deadline_label)
         self.add(blocked_label)
         self.add(tasks_completed_label)
         self.add(story_type_label)
+        self.add(details_button)  # Add the button to your StoryCard's layout
+
+        # Event listener to the whole StoryCard
+        self.on_press = self.select_story
+
+    def show_story_details(self, widget):
+        # Call the method on the app instance
+        self.app.show_story_details(self.story)
+
+    def select_story(self, widget):
+        self.on_select(self.story)
 
 
 class ShortcutApp(toga.App):
@@ -42,10 +59,14 @@ class ShortcutApp(toga.App):
         # Register a new font
         toga.Font.register("Roboto", "resources/fonts/Roboto/Roboto-Regular.ttf")
         # NOTE: not supported on Mac OS
-        toga.Font.register("Roboto bold", "resources/fonts/Roboto/Roboto-Regular.ttf", weight=BOLD)
+        toga.Font.register(
+            "Roboto bold", "resources/fonts/Roboto/Roboto-Regular.ttf", weight=BOLD
+        )
 
         # Create the outer ScrollContainer
-        self.outer_scroll_container = toga.ScrollContainer(horizontal=True, vertical=True)
+        self.outer_scroll_container = toga.ScrollContainer(
+            horizontal=True, vertical=True
+        )
         self.outer_scroll_container.style.height = 500
         self.outer_scroll_container.style.min_width = 500
 
@@ -101,7 +122,10 @@ class ShortcutApp(toga.App):
             header_label = toga.Label(
                 state,
                 style=Pack(
-                    padding=(5, 5), background_color="white", text_align="center", font_family='Roboto',
+                    padding=(5, 5),
+                    background_color="white",
+                    text_align="center",
+                    font_family="Roboto",
                 ),
             )
             header_label.style.font_weight = "bold"
@@ -191,6 +215,67 @@ class ShortcutApp(toga.App):
 
             raise HTTPError(error_msg)
 
+    def show_story_details(self, widget):
+        story_card = widget.parent
+        story = story_card.story
+
+        details_window = toga.Window(title=f"Story: {story['name']}")
+        details_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
+
+        # Story Name and Type
+        name_label = toga.Label(f"Name: {story['name']}")
+        type_label = toga.Label(f"Type: {story['story_type']}")
+
+        # Story ID and Global ID
+        id_label = toga.Label(f"ID: {story['id']}")
+        global_id_label = toga.Label(f"Global ID: {story['global_id']}")
+
+        # Dates
+        created_at_label = toga.Label(f"Created At: {story['created_at']}")
+        updated_at_label = toga.Label(f"Updated At: {story['updated_at']}")
+        deadline_label = toga.Label(f"Deadline: {story.get('deadline', 'No Deadline')}")
+
+        # Status
+        status_label = toga.Label(
+            f"Status: {'Completed' if story['completed'] else 'In Progress'}"
+        )
+
+        # Assignees
+        owners_label = toga.Label(f"Owners: {', '.join(story['owner_ids'])}")
+        followers_label = toga.Label(f"Followers: {', '.join(story['follower_ids'])}")
+
+        # Tasks (you would ideally fetch task names, here just showing IDs)
+        tasks_label = toga.Label(f"Tasks: {', '.join(map(str, story['task_ids']))}")
+
+        # Labels (assuming labels would have a name or title attribute)
+        labels_label = toga.Label(
+            f"Labels: {', '.join(label['name'] for label in story['labels'])}"
+        )
+
+        # Links
+        app_url_label = toga.Label(f"App URL: {story['app_url']}")
+
+        # Add all the labels to the details_box
+        for label in [
+            name_label,
+            type_label,
+            id_label,
+            global_id_label,
+            created_at_label,
+            updated_at_label,
+            deadline_label,
+            status_label,
+            owners_label,
+            followers_label,
+            tasks_label,
+            app_url_label,
+            labels_label,
+        ]:  # Add labels_label if you have label names
+            details_box.add(label)
+
+        details_window.content = details_box
+        details_window.show()
+
     def update_stories_view(self, stories):
 
         # Clear existing cards
@@ -214,7 +299,7 @@ class ShortcutApp(toga.App):
             )  # Default to 'To Do' if no match
 
             if state_name in self.story_cards:
-                card = StoryCard(story, style=Pack(padding=5))
+                card = StoryCard(story, self, style=Pack(padding=5))
                 self.story_cards[state_name].add(card)
                 self.story_cards[state_name].refresh()
             else:
@@ -225,7 +310,10 @@ class ShortcutApp(toga.App):
             print(f"Inspecting column: {state}")
             has_content = False
             for i, child in enumerate(column_box.children):
-                if not isinstance(child, toga.Box) or child.style.visibility == 'visible':
+                if (
+                    not isinstance(child, toga.Box)
+                    or child.style.visibility == "visible"
+                ):
                     has_content = True
                     break
 
