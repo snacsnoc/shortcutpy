@@ -215,66 +215,129 @@ class ShortcutApp(toga.App):
 
             raise HTTPError(error_msg)
 
+    def fetch_story_details(self, story_id):
+        headers = {
+            "Content-Type": "application/json",
+            "Shortcut-Token": SHORTCUT_API_TOKEN,
+        }
+        response = requests.get(
+            f"https://api.app.shortcut.com/api/v3/stories/{story_id}", headers=headers
+        )
+        if response.status_code == 200:
+            return response.json()  # Return the JSON data of the story
+        else:
+            error_msg = f"Bad request, status code: {response.status_code}"
+            if response.text:
+                error_msg += f", response text: {response.text}"
+
+            raise HTTPError(error_msg)
+
     def show_story_details(self, widget):
         story_card = widget.parent
         story = story_card.story
 
-        details_window = toga.Window(title=f"Story: {story['name']}")
-        details_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
+        story_details = self.fetch_story_details(story["id"])
 
-        # Story Name and Type
-        name_label = toga.Label(f"Name: {story['name']}")
-        type_label = toga.Label(f"Type: {story['story_type']}")
+        if story_details:
+            print(story_details)
+            details_window = toga.Window(title=f"Story: {story_details['name']}")
+            details_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
 
-        # Story ID and Global ID
-        id_label = toga.Label(f"ID: {story['id']}")
-        global_id_label = toga.Label(f"Global ID: {story['global_id']}")
+            # Story Name and Type
+            name_label = toga.Label(
+                f"Name: {story_details['name']}", style=Pack(padding=(0, 0, 5, 0))
+            )
+            type_label = toga.Label(
+                f"Type: {story_details['story_type']}", style=Pack(padding=(0, 0, 5, 0))
+            )
 
-        # Dates
-        created_at_label = toga.Label(f"Created At: {story['created_at']}")
-        updated_at_label = toga.Label(f"Updated At: {story['updated_at']}")
-        deadline_label = toga.Label(f"Deadline: {story.get('deadline', 'No Deadline')}")
+            # Description (displays as markdown)
+            description_label = toga.Label(
+                f"Description: {story_details['description']}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
 
-        # Status
-        status_label = toga.Label(
-            f"Status: {'Completed' if story['completed'] else 'In Progress'}"
-        )
+            # Story ID and Global ID
+            id_label = toga.Label(
+                f"Story ID: {story_details['id']}", style=Pack(padding=(0, 0, 5, 0))
+            )
+            global_id_label = toga.Label(
+                f"Global ID: {story_details['global_id']}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
 
-        # Assignees
-        owners_label = toga.Label(f"Owners: {', '.join(story['owner_ids'])}")
-        followers_label = toga.Label(f"Followers: {', '.join(story['follower_ids'])}")
+            # Dates
+            created_at_label = toga.Label(
+                f"Created At: {story_details['created_at']}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
+            updated_at_label = toga.Label(
+                f"Updated At: {story_details['updated_at']}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
+            deadline_label = toga.Label(
+                f"Deadline: {story_details.get('deadline', 'No Deadline')}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
 
-        # Tasks (you would ideally fetch task names, here just showing IDs)
-        tasks_label = toga.Label(f"Tasks: {', '.join(map(str, story['task_ids']))}")
+            # Status
+            status_label = toga.Label(
+                f"Status: {'Completed' if story_details['completed'] else 'In Progress'}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
 
-        # Labels (assuming labels would have a name or title attribute)
-        labels_label = toga.Label(
-            f"Labels: {', '.join(label['name'] for label in story['labels'])}"
-        )
+            # Assignees
+            owners_label = toga.Label(
+                f"Owners: {', '.join(story_details['owner_ids'])}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
+            followers_label = toga.Label(
+                f"Followers: {', '.join(story_details['follower_ids'])}",
+                style=Pack(padding=(0, 0, 5, 0)),
+            )
 
-        # Links
-        app_url_label = toga.Label(f"App URL: {story['app_url']}")
+            # Tasks
+            tasks_details = [
+                f"{task['description']} - {'Completed' if task['complete'] else 'Incomplete'}"
+                for task in story_details["tasks"]
+            ]
+            tasks_label = toga.Label(
+                f"Tasks: {', '.join(tasks_details)}", style=Pack(padding=(0, 0, 5, 0))
+            )
 
-        # Add all the labels to the details_box
-        for label in [
-            name_label,
-            type_label,
-            id_label,
-            global_id_label,
-            created_at_label,
-            updated_at_label,
-            deadline_label,
-            status_label,
-            owners_label,
-            followers_label,
-            tasks_label,
-            app_url_label,
-            labels_label,
-        ]:  # Add labels_label if you have label names
-            details_box.add(label)
+            # Labels
+            labels_label = toga.Label(
+                f"Labels: {', '.join(label['name'] for label in story_details['labels'])}"
+            )  # if labels had 'name' key
 
-        details_window.content = details_box
-        details_window.show()
+            # App URL TODO: make shareable
+            app_url_label = toga.Label(
+                f"App URL: {story_details['app_url']}", style=Pack(padding=(0, 0, 5, 0))
+            )
+
+            # Add all the labels to the details_box
+            for label in [
+                name_label,
+                type_label,
+                description_label,
+                id_label,
+                global_id_label,
+                created_at_label,
+                updated_at_label,
+                deadline_label,
+                status_label,
+                owners_label,
+                followers_label,
+                app_url_label,
+                tasks_label,
+                labels_label,
+            ]:
+                details_box.add(label)
+
+            details_window.content = details_box
+            details_window.show()
+        else:
+            print("Failed to fetch story details.")
 
     def update_stories_view(self, stories):
 
