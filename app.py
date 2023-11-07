@@ -52,6 +52,18 @@ class StoryCard(toga.Box):
         self.on_select(self.story)
 
 
+class StoryList(toga.Box):
+    def __init__(self, story, app, style=None):
+        super().__init__(style=Pack(direction=COLUMN, padding=5))
+        self.app = app
+        self.story = story
+
+        # Creating the list view layout similar to the card view, but without borders/backgrounds
+        story_label = toga.Label(f"{story.get('name', 'N/A')}")
+
+        self.add(story_label)
+
+
 class ShortcutApp(toga.App):
     def startup(self):
         self.main_window = toga.MainWindow(title="Shortcut Stories")
@@ -63,6 +75,16 @@ class ShortcutApp(toga.App):
             "Roboto bold", "resources/fonts/Roboto/Roboto-Regular.ttf", weight=BOLD
         )
 
+        self.story_states = [
+            "To Do",
+            "Backlog",
+            "In Progress",
+            "Completed",
+            "Blocked",
+            "In Review",
+            "Done",
+        ]
+
         # Create the outer ScrollContainer
         self.outer_scroll_container = toga.ScrollContainer(
             horizontal=True, vertical=True
@@ -70,6 +92,57 @@ class ShortcutApp(toga.App):
         self.outer_scroll_container.style.height = 500
         self.outer_scroll_container.style.min_width = 500
 
+        self.view_switch = toga.Switch(
+            "Card View", on_change=self.toggle_view, value=True
+        )
+        self.is_card_view = True
+
+        # Create boxes for both views
+        self.card_box = self.create_card_view()
+        self.list_box = self.create_list_view()
+
+        if self.is_card_view:
+            self.outer_scroll_container.content = self.card_box
+        else:
+            self.outer_scroll_container.content = self.list_box
+
+        self.content_box.style.flex = 1
+
+        # Main displays
+        self.content_box.add(self.view_switch)
+        self.content_box.add(self.member_selection)
+        self.content_box.add(self.outer_scroll_container)
+
+        # Set the main content box as the content of the main window
+        self.main_window.content = self.content_box
+        self.main_window.show()
+
+        # Fetch members to populate the selection widget
+        self.fetch_members()
+
+    def create_list_view(self):
+        main_box = toga.Box(style=Pack(direction=COLUMN, padding=5))
+
+        # Test data
+        states_and_stories = {
+            "To Do": ["Story 1", "Story 2"],
+            "In Progress": ["Story 3"],
+            "Done": ["Story 4", "Story 5"],
+        }
+
+        for state, stories in states_and_stories.items():
+            state_label = toga.Label(
+                f"STATE - {state}",
+                style=Pack(padding_bottom=5, font_size=14, font_weight="bold"),
+            )
+            main_box.add(state_label)
+
+            for story in stories:
+                story_label = toga.Label(f"Story: {story}", style=Pack(padding_left=10))
+                main_box.add(story_label)
+        return main_box
+
+    def create_card_view(self):
         # Create the boxes that display in the scroll_container
         self.content_box = toga.Box(style=Pack(direction=COLUMN, padding=5))
         self.headers_box = toga.Box(style=Pack(direction=ROW, padding=5))
@@ -82,18 +155,8 @@ class ShortcutApp(toga.App):
         # Minimum width for headers and story cards
         header_width = 280
 
-        states = [
-            "To Do",
-            "Backlog",
-            "In Progress",
-            "Completed",
-            "Blocked",
-            "In Review",
-            "Done",
-        ]
-
         # Create story and header columns
-        for state in states:
+        for state in self.story_states:
             # Create a new box to act as a column
             column_box = toga.Box(style=Pack(direction=COLUMN, padding=5))
             column_box.style.min_height = 200  # Set a minimum height for the column
@@ -149,22 +212,17 @@ class ShortcutApp(toga.App):
         # Add the headers_and column box to the scrollable content box
         self.scrollable_content_box.add(self.headers_box)
         self.scrollable_content_box.add(self.columns_box)
+        return self.scrollable_content_box
 
-        # Set the scrollable content box as the content of the outer_scroll_container
-        self.outer_scroll_container.content = self.scrollable_content_box
+    def toggle_view(self, switch):
+        self.is_card_view = switch.value
+        new_view = self.card_box if self.is_card_view else self.list_box
+        self.outer_scroll_container.content = None
 
-        self.content_box.style.flex = 1
+        self.outer_scroll_container.content = new_view
 
-        # Main displays
-        self.content_box.add(self.member_selection)
-        self.content_box.add(self.outer_scroll_container)
-
-        # Set the main content box as the content of the main window
-        self.main_window.content = self.content_box
-        self.main_window.show()
-
-        # Fetch members to populate the selection widget
-        self.fetch_members()
+        # Re-fetch stories for the selected member to refresh the view
+        self.on_member_selected(self.member_selection)
 
     def fetch_members(self):
         headers = {
@@ -353,36 +411,60 @@ class ShortcutApp(toga.App):
             500000005: "In Review",
             500000004: "Completed",
         }
-        # Add new stories
-        for story in stories:
-            state_id = story.get("workflow_state_id")
-            state_name = state_id_mapping.get(
-                state_id, "To Do"
-            )  # Default to 'To Do' if no match
+        if self.is_card_view:
 
-            if state_name in self.story_cards:
-                card = StoryCard(story, self, style=Pack(padding=5))
-                self.story_cards[state_name].add(card)
-                self.story_cards[state_name].refresh()
-            else:
-                raise LookupError(f"No matching state for story with state ID {state_id}")
+            # Add new stories
+            for story in stories:
+                state_id = story.get("workflow_state_id")
+                state_name = state_id_mapping.get(
+                    state_id, "To Do"
+                )  # Default to 'To Do' if no match
 
-        # Ensure each column box has at least one visible widget
-        for state, column_box in self.story_cards.items():
-            has_content = False
-            for i, child in enumerate(column_box.children):
-                if (
-                    not isinstance(child, toga.Box)
-                    or child.style.visibility == "visible"
-                ):
-                    has_content = True
-                    break
+                if state_name in self.story_cards:
+                    card = StoryCard(story, self, style=Pack(padding=5))
+                    self.story_cards[state_name].add(card)
+                    self.story_cards[state_name].refresh()
+                else:
+                    raise LookupError(
+                        f"No matching state for story with state ID {state_id}"
+                    )
 
-            if not has_content:
-                placeholder = toga.Label(
-                    "No stories!", style=Pack(padding=5, text_align="center")
-                )
-                column_box.add(placeholder)
+            # Ensure each column box has at least one visible widget
+            for state, column_box in self.story_cards.items():
+                has_content = False
+                for i, child in enumerate(column_box.children):
+                    if (
+                        not isinstance(child, toga.Box)
+                        or child.style.visibility == "visible"
+                    ):
+                        has_content = True
+                        break
+
+                if not has_content:
+                    placeholder = toga.Label(
+                        "No stories!", style=Pack(padding=5, text_align="center")
+                    )
+                    column_box.add(placeholder)
+        else:
+            # Add new stories as list items
+            for story in stories:
+                state_id = story.get("workflow_state_id")
+                state_name = state_id_mapping.get(
+                    state_id, "To Do"
+                )  # Default to 'To Do' if no match
+
+                if state_name in self.story_cards:
+                    list_item = StoryList(story, self, style=Pack(padding=5))
+                    self.story_cards[state_name].add(list_item)
+                    self.story_cards[state_name].refresh()
+                else:
+                    raise LookupError(
+                        f"No matching state for story with state ID {state_id}"
+                    )
+
+            # Refresh the content to display the updated layout
+            # for column_box in self.story_cards.values():
+            #    column_box.refresh()
 
         self.columns_box.refresh()
 
