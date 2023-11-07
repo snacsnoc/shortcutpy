@@ -29,7 +29,7 @@ class StoryCard(toga.Box):
             f"Tasks completed: {story.get('num_tasks_completed', 'N/A')}"
         )
         story_type_label = toga.Label(f"Type: {story.get('story_type', 'N/A')}")
-        # Create a button or another widget that can be clicked
+
         details_button = toga.Button(
             "View Details", on_press=self.app.show_story_details
         )
@@ -39,7 +39,7 @@ class StoryCard(toga.Box):
         self.add(blocked_label)
         self.add(tasks_completed_label)
         self.add(story_type_label)
-        self.add(details_button)  # Add the button to your StoryCard's layout
+        self.add(details_button)
 
         # Event listener to the whole StoryCard
         self.on_press = self.select_story
@@ -193,7 +193,7 @@ class ShortcutApp(toga.App):
         if member_id is not None:
             self.fetch_stories(member_id)
         else:
-            print("no member id")
+            raise ValueError("No member ID!")
 
     def fetch_stories(self, member_id):
         headers = {
@@ -224,7 +224,7 @@ class ShortcutApp(toga.App):
             f"https://api.app.shortcut.com/api/v3/stories/{story_id}", headers=headers
         )
         if response.status_code == 200:
-            return response.json()  # Return the JSON data of the story
+            return response.json()
         else:
             error_msg = f"Bad request, status code: {response.status_code}"
             if response.text:
@@ -239,7 +239,6 @@ class ShortcutApp(toga.App):
         story_details = self.fetch_story_details(story["id"])
 
         if story_details:
-            print(story_details)
             details_window = toga.Window(title=f"Story: {story_details['name']}")
             details_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
 
@@ -308,7 +307,7 @@ class ShortcutApp(toga.App):
             # Labels
             labels_label = toga.Label(
                 f"Labels: {', '.join(label['name'] for label in story_details['labels'])}"
-            )  # if labels had 'name' key
+            )
 
             # App URL TODO: make shareable
             app_url_label = toga.Label(
@@ -337,7 +336,7 @@ class ShortcutApp(toga.App):
             details_window.content = details_box
             details_window.show()
         else:
-            print("Failed to fetch story details.")
+            raise Exception("Failed to fetch story details.")
 
     def update_stories_view(self, stories):
 
@@ -366,11 +365,10 @@ class ShortcutApp(toga.App):
                 self.story_cards[state_name].add(card)
                 self.story_cards[state_name].refresh()
             else:
-                print(f"No matching state for story with state ID {state_id}")
+                raise LookupError(f"No matching state for story with state ID {state_id}")
 
         # Ensure each column box has at least one visible widget
         for state, column_box in self.story_cards.items():
-            print(f"Inspecting column: {state}")
             has_content = False
             for i, child in enumerate(column_box.children):
                 if (
